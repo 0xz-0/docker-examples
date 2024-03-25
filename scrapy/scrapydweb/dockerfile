@@ -1,0 +1,14 @@
+# 运行时环境有问题，先不采取二阶段构建
+FROM python:3.11.8
+
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# Alter to docker volumes
+# COPY scrapydweb_settings_v10.py /scrapydweb/
+RUN mkdir /scrapydweb
+WORKDIR /scrapydweb/
+
+EXPOSE 5000
+
+ENTRYPOINT ["scrapydweb"]

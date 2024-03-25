@@ -1,0 +1,4 @@
+scrapyd
+logparser
+psycopg2-binary
+# psycopg2

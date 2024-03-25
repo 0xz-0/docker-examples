@@ -1,0 +1,43 @@
+version: '3.9'
+
+# refer: https://docs.docker.com/compose/compose-file/05-services/
+services:
+  scrapyd:
+    build: ./scrapyd
+    image: scrapd:1.0.0
+    container_name: scrapyd
+    restart: always
+    ports:
+      - "6800:6800"
+    environment:
+      TZ: 'Asia/Shanghai'
+    volumes:
+      - ./scrapyd/scrapyd.conf:/etc/scrapyd/scrapyd.conf
+      - ./scrapyd/data:/usr/scrapyd/
+    networks:
+      default:
+        ipv4_address: 172.18.0.10
+          
+  scrapydweb:
+    build: ./scrapydweb
+    image: scrapydweb:1.0.0
+    container_name: scrapydweb
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./scrapydweb/scrapydweb_settings_v10.py:/scrapydweb/scrapydweb_settings_v10.py
+    networks:
+      default:
+        ipv4_address: 172.18.0.20
+    depends_on:
+      - scrapyd
+
+# refer: https://docs.docker.com/compose/compose-file/06-networks/
+networks:
+  default:
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.18.0.0/24"
+          gateway: "172.18.0.1"
