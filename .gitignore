@@ -1,0 +1,11 @@
+# Environments & Config
+scrapy/scrapyd/scrapyd.conf
+scrapy/scrapydweb/scrapydweb_settings_v10.py
+minio/config.env
+
+# IDE
+*.code-workspace
+.vscode
+
+# Data (Volume Data)
+data/

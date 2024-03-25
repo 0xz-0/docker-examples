@@ -1,0 +1,18 @@
+version: '3.9'
+
+# refer: https://docs.docker.com/compose/compose-file/05-services/
+services:
+  minio:
+    image: minio/minio:RELEASE.2024-03-15T01-07-19Z
+    container_name: local_minio
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_CONFIG_ENV_FILE: "/etc/config.env"
+    volumes:
+      - ./data:/mnt/data
+      - ./config.env:/etc/config.env
+    command: server --console-address :9001
+    
