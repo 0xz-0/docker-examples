@@ -1,0 +1,14 @@
+version: '3.9'
+
+# refer: https://docs.docker.com/compose/compose-file/05-services/
+services:
+  redis:
+    image: redis:7.2.4
+    container_name: local_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data:/data
+      - ./redis.conf:/etc/redis/redis.conf
+    command: redis-server
