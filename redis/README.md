@@ -30,7 +30,7 @@
 
 
    # docker run
-   ## Liunx bash
+   ## Linux bash
    docker run -d \
       --name local_redis \
       --restart always \
