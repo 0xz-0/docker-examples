@@ -8,6 +8,37 @@ RUN pip3 install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghu
 
 FROM python:3.11.8-slim as deploy
 
+# add channel for debian bookworm and update source list because of the default source list is too slow in China
+# https://mirrors.tuna.tsinghua.edu.cn/help/debian/
+RUN rm -rf /etc/apt/sources.list && \
+    echo 'deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm  main contrib non-free non-free-firmware' >>/etc/apt/sources.list && \
+    echo 'deb-src https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm  main contrib non-free non-free-firmware' >>/etc/apt/sources.list && \
+    echo 'deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm-updates main contrib non-free non-free-firmware' >>/etc/apt/sources.list && \
+    echo 'deb-src https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm-updates main contrib non-free non-free-firmware' >>/etc/apt/sources.list && \
+    echo 'deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm-backports main contrib non-free non-free-firmware' >>/etc/apt/sources.list && \
+    echo 'deb-src https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm-backports main contrib non-free non-free-firmware' >>/etc/apt/sources.list && \
+    echo 'deb https://mirrors.tuna.tsinghua.edu.cn/debian-security bookworm-security main contrib non-free non-free-firmware' >>/etc/apt/sources.list && \
+    echo 'deb-src https://mirrors.tuna.tsinghua.edu.cn/debian-security bookworm-security main contrib non-free non-free-firmware' >>/etc/apt/sources.list
+
+# Use a faster mirror for apt-get update
+RUN apt-get -y update && \
+    apt-get -y install --no-install-recommends wget unzip && \
+    apt-get clean
+    
+# download and install chrome
+RUN wget -O /google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
+    apt-get -y install /google-chrome.deb && \
+    rm -rf /google-chrome.deb
+
+RUN CHROME_VERSION=$(google-chrome --version | awk '{print $3}') && \
+    echo "Current Chrome version: $CHROME_VERSION" && \
+    wget --no-check-certificate -O /chromedriver-linux64.zip https://storage.googleapis.com/chrome-for-testing-public/$CHROME_VERSION/linux64/chromedriver-linux64.zip
+
+RUN unzip /chromedriver-linux64.zip && \
+    rm -rf /chromedriver-linux64.zip && \
+    chmod +x /chromedriver-linux64/chromedriver && \
+    cp /chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
+
 # https://scrapyd.readthedocs.io/en/stable/config.html
 # Alter to docker volumes
 # COPY scrapyd.conf /etc/scrapyd/

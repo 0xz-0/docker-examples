@@ -1,12 +1,14 @@
+# refer: https://docs.docker.com/compose/compose-file/compose-file-v3
 version: '3.9'
 
 # refer: https://docs.docker.com/compose/compose-file/05-services/
 services:
   scrapyd:
-    build: ./scrapyd
-    image: scrapd:1.0.0
-    container_name: scrapyd
+    build: ./scrapyd 
+    image: scrapd:1.0.0 
+    container_name: scrapyd 
     restart: always
+    init: true # avoid the container to be restarted before the init process is completed
     ports:
       - "6800:6800"
     environment:

@@ -2,3 +2,5 @@ scrapyd
 logparser
 psycopg2-binary
 # psycopg2
+peewee
+selenium
