@@ -1,0 +1,12 @@
+# 缩小 build context：这些目录是运行时挂载卷/配置，无需进入构建上下文
+workspace/
+claude-config/
+
+# 含密钥的本地 env 不应进入构建上下文（保留模板）
+.env
+!.env.example
+
+# 文档/版本控制，构建用不到
+README.md
+.git
+.gitignore

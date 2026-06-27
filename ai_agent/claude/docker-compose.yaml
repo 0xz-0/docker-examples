@@ -1,0 +1,89 @@
+# Claude Code CLI on Ubuntu —— 可作为 multi-agent 平台的 agent 员工镜像
+# 全部构建过程通过 build.dockerfile_inline 内联，无需单独 Dockerfile
+# 需要 Docker Compose v2.17+
+#
+# 用法:
+#   ANTHROPIC_API_KEY=sk-xxx docker compose up -d --build
+#   docker compose exec claude-agent claude        # 进入交互
+#   docker compose exec claude-agent bash          # 进 shell
+services:
+  claude-agent:
+    container_name: claude-agent
+    image: claude-agent:latest
+    build:
+      context: .
+      dockerfile_inline: |
+        # 基础系统用 Ubuntu 22.04 (jammy)：保留 libgtk-3-0 / libatspi2.0-0 /
+        # libappindicator3-1 等旧包名，便于安装 Electron/桌面类预编译 .deb
+        # （24.04 因 t64 改名，这些包安装会报 "not installable"）
+        FROM ubuntu:22.04
+
+        ENV DEBIAN_FRONTEND=noninteractive \
+            TZ=Asia/Shanghai \
+            LANG=C.UTF-8 \
+            LC_ALL=C.UTF-8
+
+        # apt 镜像源：改用清华镜像（国内访问官方源易 502/超时）
+        # Ubuntu 22.04 使用经典格式 /etc/apt/sources.list
+        RUN sed -i 's@//archive.ubuntu.com@//mirrors.tuna.tsinghua.edu.cn@g; s@//security.ubuntu.com@//mirrors.tuna.tsinghua.edu.cn@g' \
+                /etc/apt/sources.list
+
+        # 基础开发工具
+        RUN apt-get update && apt-get install -y --no-install-recommends \
+                git curl wget ca-certificates gnupg openssh-client \
+                build-essential python3 python3-pip python3-venv \
+                jq ripgrep fd-find vim less unzip zip sudo locales tzdata
+
+        # Electron / 桌面类 .deb 常见运行时依赖（让容器内可直接安装 GUI 应用包）
+        RUN apt-get install -y --no-install-recommends \
+                libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 \
+                libatspi2.0-0 libsecret-1-0 libappindicator3-1 \
+                libgbm1 libasound2 libdrm2 xdg-utils fonts-liberation
+
+        # Node.js 20 LTS（Claude Code 需要 Node 18+）
+        RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+            && apt-get install -y --no-install-recommends nodejs
+
+        # 全局安装 Claude Code CLI
+        RUN npm install -g @anthropic-ai/claude-code \
+            && npm cache clean --force
+
+        # 说明：刻意保留 /var/lib/apt/lists（不做 rm 清理），
+        # 这样容器内可直接 `sudo apt install ...`，无需先 apt-get update —— 开发用更方便
+
+        # 非 root 用户（多数 agent 平台要求非 root 运行）
+        RUN useradd -m -s /bin/bash agent \
+            && echo "agent ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agent
+
+        USER agent
+        WORKDIR /workspace
+        RUN claude --version || true
+        CMD ["bash"]
+
+    environment:
+      # 鉴权二选一，均通过宿主机环境变量注入，未设置则为空：
+      #   ① 官方直连：设置 ANTHROPIC_API_KEY
+      #   ② 第三方网关：设置 ANTHROPIC_AUTH_TOKEN + ANTHROPIC_BASE_URL
+      # 注意：若挂载的 claude-config/settings.json 里写了 env，会覆盖这里注入的同名变量
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_AUTH_TOKEN: ${ANTHROPIC_AUTH_TOKEN:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+      IS_SANDBOX: "1"
+
+    # 放开 seccomp 限制（Electron/Chromium 沙箱、部分桌面应用需要）
+    # 等价于 docker run --security-opt seccomp=unconfined
+    security_opt:
+      - seccomp:unconfined
+
+    working_dir: /workspace
+    volumes:
+      # 宿主机路径可通过环境变量覆盖，未指定则用默认 ./workspace 和 ./claude-config
+      #   WORKSPACE_DIR=/path/to/proj CLAUDE_CONFIG_DIR=/path/to/cfg docker compose up -d
+      - ${WORKSPACE_DIR:-./workspace}:/workspace            # 工作区，宿主机可见 agent 产出
+      - ${CLAUDE_CONFIG_DIR:-./claude-config}:/home/agent/.claude  # 持久化登录态/配置（宿主机目录）
+
+    # 让容器保持运行，便于 exec 进入或被平台调度
+    stdin_open: true
+    tty: true
+    command: ["bash"]

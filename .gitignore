@@ -3,6 +3,8 @@ scrapy/scrapyd/scrapyd.conf
 scrapy/scrapydweb/scrapydweb_settings_v10.py
 minio/config.env
 redis/redis.conf
+.env
+!.env.example
 
 # IDE
 *.code-workspace
@@ -10,3 +12,8 @@ redis/redis.conf
 
 # Data (Volume Data)
 data/
+workspace/
+claude-config/
+
+# AI Coding
+.claude/
