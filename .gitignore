@@ -3,6 +3,7 @@ scrapy/scrapyd/scrapyd.conf
 scrapy/scrapydweb/scrapydweb_settings_v10.py
 minio/config.env
 redis/redis.conf
+rabbit_mq/rabbitmq.conf
 .env
 .env.*
 !.env.example
