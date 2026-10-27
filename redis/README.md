@@ -49,3 +49,16 @@
       --volume .\\data:/data ^
       redis:7.2.4
    ```
+
+   ```powershell
+   ## powershell
+   docker run -d `
+       --name local_redis `
+       --restart always `
+       --publish 6379:6379 `
+       --env POSTGRES_USER=postgres `
+       --env POSTGRES_PASSWORDs=postgres `
+      --volume .\\redis.conf:/etc/redis/redis.conf `
+      --volume .\\data:/data `
+       redis:7.2.4
+    ```
