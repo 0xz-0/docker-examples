@@ -1,6 +1,6 @@
 # Claude Code Agent (Docker)
 
-在 Ubuntu 22.04 容器中运行 [Claude Code CLI](https://github.com/anthropics/claude-code)，可作为 multi-agent 平台的「agent 员工」镜像使用。这是一个**面向开发的较完整镜像**（非极简），容器内可直接 `apt install` 安装依赖与桌面类 `.deb` 应用。
+在 Ubuntu 22.04 容器中运行 [Claude Code CLI](https://github.com/anthropics/claude-code)，可作为 multi-agent 平台的「agent 员工」镜像使用。这是一个**面向可信项目开发的较完整镜像**（非极简）。系统依赖与桌面类 `.deb` 应用在构建阶段安装，运行时使用无 sudo 权限的普通用户。
 
 镜像的全部构建过程通过 [docker-compose.yaml](docker-compose.yaml) 的 `build.dockerfile_inline` 内联，**无需单独的 Dockerfile**。
 
@@ -10,10 +10,10 @@
   - 选 22.04 而非 24.04，是因为 24.04 的 [t64 改名](#关于桌面应用-deb-的安装)会让 `libgtk-3-0` / `libatspi2.0-0` 等旧包名「装不上」，导致很多预编译 `.deb` 失败
 - **开发工具**：`git` `curl` `wget` `jq` `ripgrep` `fd-find` `vim` `unzip` `zip` `build-essential` `python3` / `pip` / `venv` 等
 - **桌面运行时依赖**：预装 `libgtk-3-0` `libnss3` `libnotify4` `libxss1` `libxtst6` `libatspi2.0-0` `libsecret-1-0` `libappindicator3-1` `libgbm1` `libasound2` `xdg-utils` 等，方便安装 Electron/桌面类 `.deb`
-- **Node.js 20 LTS**（Claude Code 需要 Node 18+）
-- **Claude Code CLI**：`@anthropic-ai/claude-code` 全局安装
-- **保留 apt 索引**：未清理 `/var/lib/apt/lists`，容器内 `sudo apt install` 无需先 `apt-get update`
-- **非 root 用户**：`agent`（拥有免密 `sudo`），多数 agent 平台要求非 root 运行
+- **Node.js 24 LTS**：从官方 `node:24-bookworm-slim` 镜像复制 Node 和 npm，不执行远程安装脚本
+- **Claude Code CLI**：固定安装 `@anthropic-ai/claude-code@2.1.311`，禁用自动更新；升级通过修改版本、验证和重新构建完成
+- **非 root 用户**：`agent`（UID 1000，无 sudo 权限）
+- **运行时权限**：保留 Docker 默认 seccomp，设置 `no-new-privileges`，移除全部 Linux capabilities
 - 默认工作目录 `/workspace`
 
 ## 前置要求
@@ -25,20 +25,16 @@
 
 ## 快速开始
 
-> 推荐先用模板生成 `.env`（含密钥，已被 `.gitignore` 忽略，不会入库），变量会被 Compose 自动读取：
+> 在本目录用模板生成 `.env`，填写一种鉴权方式；Compose 会自动读取。`.env` 与 `.env.*` 默认被 Git 和构建上下文忽略（保留 `.env.example`），不要强制加入版本控制：
 > ```bash
 > cp .env.example .env   # 然后填入鉴权信息，启动时即可省略命令行注入
+> chmod 600 .env         # Linux/macOS；Windows 请限制文件 ACL 为当前用户可读写
 > ```
 
 ```bash
 # 1. 构建并后台启动（容器会保持运行，便于 exec 进入或被平台调度）
 
-# 方式 ①：官方直连
-ANTHROPIC_API_KEY=sk-xxx docker compose up -d --build
-
-# 方式 ②：第三方网关
-ANTHROPIC_AUTH_TOKEN=sk-xxx ANTHROPIC_BASE_URL=http://your-gateway:4000 docker compose up -d --build
-
+docker compose up -d --build
 
 # 2. 进入 Claude Code 交互界面
 docker compose exec claude-agent claude
@@ -47,13 +43,14 @@ docker compose exec claude-agent claude
 docker compose exec claude-agent bash
 ```
 
-> PowerShell 下设置环境变量：
+> PowerShell 下也建议编辑 `.env`，避免将真实令牌写入命令历史：
 > ```powershell
-> # 官方直连
-> $env:ANTHROPIC_API_KEY="sk-xxx"; docker compose up -d --build
-> # 第三方网关
-> $env:ANTHROPIC_AUTH_TOKEN="sk-xxx"; $env:ANTHROPIC_BASE_URL="http://your-gateway:4000"; docker compose up -d --build
+> Copy-Item .env.example .env
+> # 编辑 .env 并限制其文件权限后启动
+> docker compose up -d --build
 > ```
+
+远程网关的 `ANTHROPIC_BASE_URL` 使用 HTTPS，例如 `https://gateway.example.com`，以保护令牌和请求内容。HTTP 仅适用于可信隔离的本地链路；不要通过公网或不可信内网明文传输。
 
 > ⚠️ **优先级**：若挂载的 `claude-config/settings.json` 里写了 `env`（例如 `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_BASE_URL`），它会**覆盖**上面通过命令行注入的同名变量。排查"key 设了却没生效"时优先检查该文件。
 
@@ -63,9 +60,9 @@ docker compose exec claude-agent bash
 | --- | --- |
 | `ANTHROPIC_API_KEY` | 官方直连方式的密钥，通过宿主机环境变量注入，未设置则为空 |
 | `ANTHROPIC_AUTH_TOKEN` | 第三方网关方式的令牌，与 `ANTHROPIC_BASE_URL` 配合使用 |
-| `ANTHROPIC_BASE_URL` | 第三方网关地址，例如 `http://your-gateway:4000` |
+| `ANTHROPIC_BASE_URL` | 第三方网关地址，例如 `https://gateway.example.com` |
 | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | 已设为 `1`，关闭非必要的遥测/流量 |
-| `IS_SANDBOX` | 已设为 `1`，标记容器为沙箱环境 |
+| `DISABLE_AUTOUPDATER` | 已设为 `1`，CLI 升级通过重新构建固定版本完成 |
 | `WORKSPACE_DIR` | 可选，工作区在宿主机上的路径，未设置则默认 `./workspace` |
 | `CLAUDE_CONFIG_DIR` | 可选，配置/登录态在宿主机上的路径，未设置则默认 `./claude-config` |
 
@@ -75,12 +72,16 @@ docker compose exec claude-agent bash
 
 ## 关于桌面应用 .deb 的安装
 
-容器内可直接安装 Electron/桌面类预编译 `.deb`（依赖已预装）：
+运行中的 agent 不具备安装系统软件的权限。需要额外系统包时，在内联 Dockerfile 的 `USER agent` **之前**添加构建指令，例如：
 
-```bash
-docker compose exec claude-agent bash
-sudo apt install ./multica-desktop-0.1.0-linux-amd64.deb   # 或 sudo dpkg -i ... && sudo apt -f install
+```dockerfile
+RUN apt-get update && apt-get install -y --no-install-recommends <package-name> \
+    && rm -rf /var/lib/apt/lists/*
 ```
+
+安装 `.deb` 时，先确认发布者和校验值，再用 `COPY` 和 `RUN apt-get install` 在构建阶段安装。构建过程会以 root 执行软件包安装脚本，只安装可信软件。完成后重新构建镜像。
+
+若 GUI 应用确实与默认 seccomp 不兼容，应先定位所需系统调用，再评估专用的最小权限配置；不要为普通 CLI 使用关闭默认隔离。
 
 > **为什么基础镜像用 22.04 而不是 24.04？**
 > Ubuntu 24.04 (noble) 做了 **t64（64 位 time_t）改名**：`libgtk-3-0` → `libgtk-3-0t64`、`libatspi2.0-0` → `libatspi2.0-0t64`，`libappindicator3-1` 被移除。很多按旧版 Ubuntu 打包、依赖里写死旧包名的 `.deb`，在 24.04 上会报 `Depends: libgtk-3-0 but it is not installable`，**即使 `apt-get update` 也装不上**。22.04 (jammy) 仍保留这些旧包名，因此兼容性更好。
@@ -122,6 +123,17 @@ CLAUDE_CONFIG_DIR=/data/cfg
 > sudo chown -R 1000:1000 ./workspace ./claude-config
 > ```
 > Windows（Docker Desktop）和 macOS 由文件共享层自动处理属主，**无需此步**。
+
+## 安全边界与更新
+
+- 本配置不是运行任意恶意代码的安全沙箱。项目脚本与 agent 使用相同身份，可以读取传入的 API 凭据和挂载的登录配置；改用 secret 文件也不能隔离同一身份的读取权限。
+- 使用专用、限额、尽可能短期的凭据。不同项目或信任域分别使用工作目录和 `claude-config`，不要复用个人主账号的登录目录。配置目录及其备份同样按敏感信息保护。
+- 仅挂载专用项目目录；不要挂载宿主机根目录、整个用户目录、SSH/云凭据目录或 Docker socket。工作区与配置卷可写，容器内修改和删除会作用于宿主机文件；需要只读输入时单独以 `:ro` 挂载。
+- 本 Compose 未实施出站网络白名单，默认网络可能访问互联网及宿主机可达的内网。无人值守或处理不可信内容前，在宿主机、专用网关或隔离虚拟机侧限制出站访问，仅放行必要 API 和依赖服务。不要仅依赖提示词、权限弹窗或环境变量作为安全边界。
+- 不要默认开启 `--dangerously-skip-permissions`。需要执行不可信代码时，使用额外隔离环境和专门的网络、凭据策略。
+- 环境变量可被容器内进程及有 Docker 管理权限的人读取；`docker compose config` 的完整输出也可能包含真实凭据。检查配置时使用 `docker compose config --quiet`，不要公开完整配置或 inspect 输出。
+- Ubuntu、Node 基础镜像仍使用可更新标签，以便获取安全更新；CLI 固定版本不代表永远安全。定期检查安全公告，更新 CLI 版本，并执行 `docker compose build --pull --no-cache`，验证后重建容器。需要严格复现构建时，额外固定镜像 digest 并维护更新流程。
+- 构建会检查 Node、npm 和 Claude CLI 能否启动，任何检查失败都会使构建失败；这不替代镜像漏洞扫描或运行时安全验证。
 
 ## 常用命令
 

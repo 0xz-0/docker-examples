@@ -4,6 +4,7 @@ scrapy/scrapydweb/scrapydweb_settings_v10.py
 minio/config.env
 redis/redis.conf
 .env
+.env.*
 !.env.example
 
 # IDE
